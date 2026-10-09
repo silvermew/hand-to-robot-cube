@@ -1,0 +1,112 @@
+order,name,rotation_deg,start_cross,end_cross,block,notes
+1,pilot_static,,A,A,pilot,"5 s, nothing moves: cube on cross A, hand flat on the table beside it"
+2,pilot_signs,,B,B,pilot,"cube on B turned +90 four times on the table (hand out of view, 2 s still after each); then hand flat, turned +90"
+3,clip_01_rot+60_A,60,A,A,pilot,pilot clip
+4,clip_02_rot-90_B,-90,B,B,pilot,pilot clip
+5,clip_03_rot+0_C,0,C,C,pilot,pilot clip
+6,clip_04_rot+90_A,90,A,A,main 1,
+7,clip_05_rot+120_B,120,B,B,main 1,
+8,clip_06_rot-30_C,-30,C,C,main 1,
+9,clip_07_rot+30_B,30,B,B,main 1,
+10,clip_08_rot-90_A,-90,A,A,main 1,
+11,clip_09_rot+0_A,0,A,A,main 1,
+12,clip_10_rot-60_B,-60,B,B,main 1,
+13,clip_11_rot+60_C,60,C,C,main 1,
+14,clip_12_rot+0_B,0,B,B,main 2,
+15,clip_13_rot-30_A,-30,A,A,main 2,
+16,clip_14_rot+120_C,120,C,C,main 2,
+17,clip_15_rot-60_C,-60,C,C,main 2,
+18,clip_16_rot+90_B,90,B,B,main 2,
+19,clip_17_rot-90_B,-90,B,B,main 2,
+20,clip_18_rot+30_C,30,C,C,main 2,
+21,clip_19_rot+60_A,60,A,A,main 2,
+22,clip_20_rot+120_A,120,A,A,main 3,
+23,clip_21_rot+30_A,30,A,A,main 3,
+24,clip_22_rot-30_B,-30,B,B,main 3,
+25,clip_23_rot+60_B,60,B,B,main 3,
+26,clip_24_rot-60_A,-60,A,A,main 3,
+27,clip_25_rot-90_C,-90,C,C,main 3,
+28,clip_26_rot+0_C,0,C,C,main 3,
+29,clip_27_rot+90_C,90,C,C,main 3,
+30,clip_28_rot+0_A,0,A,A,main 4,
+31,clip_29_rot+60_C,60,C,C,main 4,
+32,clip_30_rot-30_C,-30,C,C,main 4,
+33,clip_31_rot-60_B,-60,B,B,main 4,
+34,clip_32_rot+120_B,120,B,B,main 4,
+35,clip_33_rot+30_B,30,B,B,main 4,
+36,clip_34_rot+90_A,90,A,A,main 4,
+37,clip_35_rot-90_A,-90,A,A,main 4,
+38,clip_36_rot+30_C,30,C,C,main 5,
+39,clip_37_rot-30_A,-30,A,A,main 5,
+40,clip_38_rot+0_B,0,B,B,main 5,
+41,clip_39_rot+60_A,60,A,A,main 5,
+42,clip_40_rot+120_C,120,C,C,main 5,
+43,clip_41_rot-60_C,-60,C,C,main 5,
+44,clip_42_rot-90_B,-90,B,B,main 5,
+45,clip_43_rot+90_B,90,B,B,main 5,
+46,clip_44_rot-60_A,-60,A,A,main 6,
+47,clip_45_rot+60_B,60,B,B,main 6,
+48,clip_46_rot+0_C,0,C,C,main 6,
+49,clip_47_rot+120_A,120,A,A,main 6,
+50,clip_48_rot+90_C,90,C,C,main 6,
+51,clip_49_rot-90_C,-90,C,C,main 6,
+52,clip_50_rot+30_A,30,A,A,main 6,
+53,clip_51_rot-30_B,-30,B,B,main 6,
+54,clip_52_rot+60_C,60,C,C,main 7,
+55,clip_53_rot+0_A,0,A,A,main 7,
+56,clip_54_rot-90_A,-90,A,A,main 7,
+57,clip_55_rot-30_C,-30,C,C,main 7,
+58,clip_56_rot+120_B,120,B,B,main 7,
+59,clip_57_rot+90_A,90,A,A,main 7,
+60,clip_58_rot+30_B,30,B,B,main 7,
+61,clip_59_rot-60_B,-60,B,B,main 7,
+62,clip_60_rot+120_C,120,C,C,main 8,
+63,clip_61_rot-30_A,-30,A,A,main 8,
+64,clip_62_rot+60_A,60,A,A,main 8,
+65,clip_63_rot+90_B,90,B,B,main 8,
+66,clip_64_rot+0_B,0,B,B,main 8,
+67,clip_65_rot-60_C,-60,C,C,main 8,
+68,clip_66_rot+30_C,30,C,C,main 8,
+69,clip_67_rot-90_B,-90,B,B,main 8,
+70,clip_68_rot+0_C,0,C,C,main 9,
+71,clip_69_rot-90_C,-90,C,C,main 9,
+72,clip_70_rot+60_B,60,B,B,main 9,
+73,clip_71_rot+30_A,30,A,A,main 9,
+74,clip_72_rot-60_A,-60,A,A,main 9,
+75,clip_73_rot+90_C,90,C,C,main 9,
+76,clip_74_rot-30_B,-30,B,B,main 9,
+77,clip_75_rot+120_A,120,A,A,main 9,
+78,clip_76_rot+0_A,0,A,B,transport,carry without turning
+79,clip_77_rot+0_B,0,B,C,transport,carry without turning
+80,clip_78_rot+0_A,0,A,C,transport,carry without turning
+81,clip_79_rot+0_C,0,C,A,transport,carry without turning
+82,clip_80_rot+0_B,0,B,A,transport,carry without turning
+83,clip_81_rot+0_C,0,C,B,transport,carry without turning
+84,clip_82_rot+0_A,0,A,B,transport,carry without turning
+85,clip_83_rot+0_B,0,B,C,transport,carry without turning
+86,clip_84_rot+0_A,0,A,C,transport,carry without turning
+87,clip_85_rot+0_C,0,C,A,transport,carry without turning
+88,clip_86_rot+0_B,0,B,A,transport,carry without turning
+89,clip_87_rot+0_C,0,C,B,transport,carry without turning
+90,clip_88_rot+60_A,60,A,B,transport,carry and turn
+91,clip_89_rot-60_B,-60,B,C,transport,carry and turn
+92,clip_90_rot+90_A,90,A,C,transport,carry and turn
+93,clip_91_rot-90_C,-90,C,A,transport,carry and turn
+94,clip_92_rot+30_B,30,B,A,transport,carry and turn
+95,clip_93_rot-30_C,-30,C,B,transport,carry and turn
+96,clip_94_rot-90_A,-90,A,A,fast (optional),"fast turn, about 0.5 s instead of 1-2 s"
+97,clip_95_rot-60_B,-60,B,B,fast (optional),"fast turn, about 0.5 s instead of 1-2 s"
+98,clip_96_rot-30_C,-30,C,C,fast (optional),"fast turn, about 0.5 s instead of 1-2 s"
+99,clip_97_rot+0_A,0,A,A,fast (optional),"fast turn, about 0.5 s instead of 1-2 s"
+100,clip_98_rot+30_B,30,B,B,fast (optional),"fast turn, about 0.5 s instead of 1-2 s"
+101,clip_99_rot+60_C,60,C,C,fast (optional),"fast turn, about 0.5 s instead of 1-2 s"
+102,clip_100_rot+90_A,90,A,A,fast (optional),"fast turn, about 0.5 s instead of 1-2 s"
+103,clip_101_rot+120_B,120,B,B,fast (optional),"fast turn, about 0.5 s instead of 1-2 s"
+104,clip_102_rot-90_B,-90,B,B,fast (optional),"fast turn, about 0.5 s instead of 1-2 s"
+105,clip_103_rot-60_C,-60,C,C,fast (optional),"fast turn, about 0.5 s instead of 1-2 s"
+106,clip_104_rot-30_A,-30,A,A,fast (optional),"fast turn, about 0.5 s instead of 1-2 s"
+107,clip_105_rot+0_B,0,B,B,fast (optional),"fast turn, about 0.5 s instead of 1-2 s"
+108,clip_106_rot+30_C,30,C,C,fast (optional),"fast turn, about 0.5 s instead of 1-2 s"
+109,clip_107_rot+60_A,60,A,A,fast (optional),"fast turn, about 0.5 s instead of 1-2 s"
+110,clip_108_rot+90_B,90,B,B,fast (optional),"fast turn, about 0.5 s instead of 1-2 s"
+111,clip_109_rot+120_C,120,C,C,fast (optional),"fast turn, about 0.5 s instead of 1-2 s"

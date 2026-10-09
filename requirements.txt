@@ -1,0 +1,15 @@
+# Main environment: Python 3.10 (~/.venvs/robot-sim, see SETUP.md).
+# pip install -r requirements.txt --extra-index-url https://download.pytorch.org/whl/cpu
+robosuite==1.5.2
+mujoco>=3.3,<3.4          # mujoco 3.14 breaks robosuite 1.5.2 (AssertionError in get_joint_qpos_addr)
+numpy==1.26.4
+opencv-python==4.11.0.86  # includes cv2.aruco
+scipy==1.15.3
+matplotlib==3.10.9
+imageio==2.38.0
+imageio-ffmpeg==0.6.0
+torch==2.14.1             # CPU build is enough for the world model
+pytest==9.1.1
+
+# System: ffmpeg / ffprobe on PATH (src.prepare_videos; without them the tracker falls back to OpenCV timestamps).
+# VLA stretch goal only: a separate Python 3.12 environment, see requirements-vla.txt.

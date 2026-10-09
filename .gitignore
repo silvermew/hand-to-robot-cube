@@ -1,0 +1,20 @@
+# raw videos, derived data, demos and datasets: rebuilt with python -m src.run_all and scripts/vla
+data/
+# third-party clone, only for the LIBERO smoke test
+LIBERO/
+# personal notes
+notes_for_me/
+# synthetic test data: pipeline checks only, not results
+outputs/synthetic/
+outputs/*/debug/
+outputs/*/sim_replay/
+# model checkpoints (1.3 GB each) and rollout videos
+outputs/vla/**/checkpoints/
+outputs/vla/**/videos*/
+*.mp4
+*.mov
+*.log
+*.pid
+*.tmp
+__pycache__/
+.pytest_cache/

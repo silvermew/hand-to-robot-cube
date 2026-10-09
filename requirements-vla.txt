@@ -1,0 +1,12 @@
+# VLA stretch goal: separate environment, Python >= 3.12 (lerobot 0.6.1 needs numpy >= 2,
+# which robosuite's main environment does not use). Locally: ~/.venvs/lerobot (see SETUP.md).
+lerobot[smolvla,dataset]==0.6.1   # pulls torch 2.11 (CUDA wheels on Linux), transformers, av, datasets
+# For closed-loop evaluation (src.eval_vla) in the same environment, then restore numpy 2:
+robosuite==1.5.2
+mujoco>=3.3,<3.4
+opencv-python
+scipy
+imageio
+imageio-ffmpeg
+matplotlib
+numpy==2.2.6                      # robosuite's dependencies pull numpy 1.26; lerobot needs >= 2 (mink's pin is harmless)

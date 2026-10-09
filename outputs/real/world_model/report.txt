@@ -1,0 +1,29 @@
+world model on 64 clips: 49 train, 7 val, 8 test (split by clip, stratified by angle, seed 0)
+
+Test clips: mean |error| in deg (rollout at 0.5 s / 1 s / 2 s / 3 s; final = free rollout from rest)
+  persistence              12.1   23.8   42.7   72.9 | final   67.4
+  follow hand               2.7    5.0    8.6   14.1 | final   13.5
+  linear gain 1.14          1.8    2.9    4.1    7.7 | final    9.2
+  MLP x5                    2.0    3.4    2.3   13.6 | final   13.7
+  GRU x5                    2.8    3.4    4.5   12.1 | final   12.2
+
+Model choice on val: MLP 14.9 vs GRU 9.9 deg final error -> keep GRU x5 (MLP unless the GRU is >10% better)
+GRU x5 DOES NOT beat the best baseline (linear gain 1.14) on final error: 12.2 vs 9.2 deg
+Trust (MLP x5): Spearman rho(disagreement, error) = 0.34; mean error per disagreement quintile: 1.4, 1.7, 2.1, 1.9, 6.1 deg
+Trust (GRU x5): Spearman rho(disagreement, error) = 0.32; mean error per disagreement quintile: 1.6, 2.2, 1.7, 2.5, 6.9 deg
+
+Re-acquisition error after a tracking gap (deg, n), by gap length:
+  persistence            0.05-0.35s:   0.4 (2)  0.35-0.75s:   1.4 (1)  0.75-1.5s:  32.7 (1)  1.5-99s:  39.8 (1)
+  follow hand            0.05-0.35s:   0.9 (2)  0.35-0.75s:   1.7 (1)  0.75-1.5s:   3.3 (1)  1.5-99s:  11.0 (1)
+  linear gain 1.14       0.05-0.35s:   0.9 (2)  0.35-0.75s:   2.2 (1)  0.75-1.5s:   0.9 (1)  1.5-99s:   6.9 (1)
+  MLP x5                 0.05-0.35s:   0.5 (2)  0.35-0.75s:   0.9 (1)  0.75-1.5s:   5.2 (1)  1.5-99s:   4.2 (1)
+  GRU x5                 0.05-0.35s:   2.5 (2)  0.35-0.75s:  21.0 (1)  0.75-1.5s:   3.3 (1)  1.5-99s:  15.7 (1)
+
+Held-out rotation range (train |angle| <= 90 on 53 clips, test +120 on 11):
+  persistence            final  131.9 deg | rollout 1 s   28.3 deg
+  follow hand            final   24.0 deg | rollout 1 s    4.5 deg
+  linear gain 1.14       final   10.2 deg | rollout 1 s    2.1 deg
+  MLP x5                 final   22.4 deg | rollout 1 s    2.2 deg
+  GRU x5                 final    9.3 deg | rollout 1 s    2.5 deg
+
+Embodiment gap through the model (GRU x5): mean |sim cube yaw - model-predicted human cube yaw| = 16.8 deg on test clips

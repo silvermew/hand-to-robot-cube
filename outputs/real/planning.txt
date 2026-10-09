@@ -1,0 +1,3 @@
+Planning with the world model vs naive (rotate by the target):
+planned : success  65.0% over 20 targets, mean |sim yaw - target|  12.2 deg
+naive   : success 100.0% over 20 targets, mean |sim yaw - target|   0.3 deg
