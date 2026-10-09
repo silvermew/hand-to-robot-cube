@@ -1,7 +1,9 @@
 # From my hand to a robot arm: turning a cube
 
+Following the directives given by humanoid where i needed to train a world model and a VLA using self filmed videos as a guiding policy this is what I have done:
+
 I filmed my own hand picking up a Rubik's cube, turning it, and putting it back down. I tracked the hand and the
-cube in 3D, replayed the motion on a simulated Panda arm, and measured where the robot does something different from
+cube in 3D using ArUco markers, replayed the motion on a simulated Panda arm, and measured where the robot does something different from
 my hand. Then I trained a small world model on my data, used it to plan, and fine-tuned a vision-language-action
 model (SmolVLA) to do the task from camera images, eventually from three different sentences.
 
@@ -9,7 +11,7 @@ Everything robot-side happens in simulation (robosuite). The data is 109 short v
 
 ![human and sim side by side](outputs/real/gifs/best_clip_62_rot+60_A.gif)
 
-## Results at a glance
+## Results summary
 
 | | Result |
 |---|---|
@@ -27,15 +29,14 @@ turned within 15 degrees of the target.
 
 ## Setup
 
-- **Cameras:** the calibrated stereo pair in the head of a robot in our lab, facing me across a black table, at
-  30 fps. Two cameras matter: one camera gets the depth of a small marker wrong by about 2 cm at 1.4 m, two
-  cameras do not.
-- **Markers:** ArUco markers on the table (the world frame), on a card on the back of my hand, and on five faces
-  of a 57 mm Rubik's cube.
+- **Cameras:** I used a calibrated stereo camera pair that was used in a previous project, I faced the cameras and used a black table to reduce image noise.
+  30 fps. Using two cameras helped me reduce the error on depth for the videos.
+- **Markers:** ArUco markers on the table (the world frame), on a carton piece stuck on the back of my hand, and on five faces
+  of a classic Rubik's cube.
 - **Recordings:**
   - 75 clips where I turn the cube on the spot by -90 to +120 degrees, on three marked spots;
   - 18 clips where I carry it to another spot;
-  - 16 fast turns.
+  - 16 clips where i tried to do the movement faster to limit test the robot.
 
 ## How it works, and what went wrong along the way
 
