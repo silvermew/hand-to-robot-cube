@@ -1,6 +1,6 @@
 # From my hand to a robot arm: turning a cube
 
-Following the directives given by humanoid where i needed to train a world model and a VLA using self filmed videos as a guiding policy this is what I have done:
+Following the directives given by Humanoid where I needed to train a world model and a VLA using self filmed videos as a guiding policy this is what I have done:
 
 I filmed my own hand picking up a Rubik's cube, turning it, and putting it back down. I tracked the hand and the
 cube in 3D using ArUco markers, replayed the motion on a simulated Panda arm, and measured where the robot does something different from
@@ -29,14 +29,14 @@ turned within 15 degrees of the target.
 
 ## Setup
 
-- **Cameras:** I used a calibrated stereo camera pair that was used in a previous project, I faced the cameras and used a black table to reduce image noise.
+- **Cameras:** I used a calibrated stereo camera pair that was used in a previous project, I faced the cameras and used a black table to reduce image noise. They record at
   30 fps. Using two cameras helped me reduce the error on depth for the videos.
 - **Markers:** ArUco markers on the table (the world frame), on a carton piece stuck on the back of my hand, and on five faces
   of a classic Rubik's cube.
 - **Recordings:**
   - 75 clips where I turn the cube on the spot by -90 to +120 degrees, on three marked spots;
   - 18 clips where I carry it to another spot;
-  - 16 clips where i tried to do the movement faster to limit test the robot.
+  - 16 clips where I tried to do the movement faster to limit test the robot.
 
 ## How it works, and what went wrong along the way
 
