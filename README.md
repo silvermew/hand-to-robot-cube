@@ -2,12 +2,15 @@
 
 Following the directives given by Humanoid where I needed to train a world model and a VLA using self filmed videos as a guiding policy this is what I have done:
 
-I filmed my own hand picking up a Rubik's cube, turning it, and putting it back down. I tracked the hand and the
+I filmed my own hand picking up a Rubik's cube, turning it, and putting it back down, and later pushing it between
+three crosses on the table. I tracked the hand and the
 cube in 3D using ArUco markers, replayed the motion on a simulated Panda arm, and measured where the robot does something different from
 my hand. Then I trained a small world model on my data, used it to plan, and fine-tuned a vision-language-action
-model (SmolVLA) to do the task from camera images, eventually from three different sentences.
+model (SmolVLA) to do the task from camera images, eventually from 19 different sentences: turn the cube, carry it
+to another cross, or push it there.
 
-Everything robot-side happens in simulation (robosuite). The data is 109 short videos of my hand.
+Everything robot-side happens in simulation (robosuite). The data is 109 short videos of my hand from a stereo camera
+pair, and 23 phone videos of pushes.
 
 ![human and sim side by side](outputs/real/gifs/best_clip_62_rot+60_A.gif)
 
@@ -23,9 +26,45 @@ Everything robot-side happens in simulation (robosuite). The data is 109 short v
 | Planning with the world model vs naive plan | 65% vs 100% |
 | SmolVLA, one instruction, 50 new cube poses | 84% (two runs: 42/50 and 42/50) |
 | SmolVLA, three instructions, same 50 poses | 76% / 40% / 88% |
+| Push moves filmed with a phone | 42 (28 straight, 14 turning) |
+| Sim replay of my pushes, straight and turning | 27/28 and 0/14 succeed |
+| SmolVLA, 19 sentences, 20 poses each (v11) | pushes 46%, pick and place 23% |
 
 A replay or policy episode counts as a success when the cube is lifted at least 2 cm, put back within 3 cm, and
-turned within 15 degrees of the target.
+turned within 15 degrees of the target. A push counts when the cube ends within 3 cm of where my push put it,
+turned within 15 degrees of the target, without being lifted or tipped.
+
+## How the pieces fit
+
+```mermaid
+flowchart LR
+    subgraph hand [My hand]
+        V1[109 stereo clips] --> T1[tracking<br/>track.py]
+        T1 --> X1[grasp and release<br/>extract.py]
+        V2[23 phone videos] --> T2[one-camera tracking<br/>push_track.py]
+        T2 --> X2[pushes and moves<br/>push_extract.py]
+    end
+    subgraph robot [Simulated Panda]
+        R1[grasp replay<br/>sim_replay.py]
+        R2[push replay<br/>sim_push.py]
+    end
+    subgraph learn [Learning]
+        WM[world model<br/>world_model/] --> PL[planning<br/>planning.py]
+        DM[demos<br/>make_sim_demos.py] --> DS[LeRobot dataset<br/>to_lerobot.py]
+        DS --> VLA[SmolVLA fine-tune<br/>scripts/vla/]
+        VLA --> EV[closed-loop test<br/>eval_vla.py]
+    end
+    X1 --> R1
+    X1 --> WM
+    PL --> R1
+    X2 --> R2
+    R1 --> DM
+    R2 --> DM
+```
+
+The robot never learns from my videos directly. My tracked motion drives a scripted controller in simulation, the
+replays that succeed become demonstrations, and SmolVLA learns from those. The world model learns from my data
+only.
 
 ## Setup
 
@@ -36,7 +75,8 @@ turned within 15 degrees of the target.
 - **Recordings:**
   - 75 clips where I turn the cube on the spot by -90 to +120 degrees, on three marked spots;
   - 18 clips where I carry it to another spot;
-  - 16 clips where I tried to do the movement faster to limit test the robot.
+  - 16 clips where I tried to do the movement faster to limit test the robot;
+  - later, 23 phone videos of pushes (section 9).
 
 ## How it works, and what went wrong along the way
 
@@ -213,13 +253,134 @@ training is the obvious next step.
 
 ![same start, three sentences](docs/vla_three_instructions.gif)
 
+### 8. Carrying the cube between crosses
+
+**How it works:**
+- I drew the three crosses of my table (A, B, C) on the sim table. My table is turned onto the sim table by one
+  fixed rotation, so a carry from A to C in my video goes from A to C in the sim. Before, each replay was turned to
+  fit the sim cube's angle, which loses the direction.
+- One of my clips per sentence, 13 sentences: turn on the spot counter-clockwise or clockwise, carry between any
+  two crosses (6), and carry while turning (5). 100 demos each, the cube on its start cross within 2 cm, at any angle.
+- Carries copy the cube's turn, not my hand's: on some plain carries my hand drifted about 20 degrees.
+
+**Problem I hit:** one carry, C to A with a -96 degree turn, never replayed. I moved fast, the scripted arm trailed
+my hand by 8 cm and put the cube down 5 cm off, so I left that sentence out.
+
+These 1300 demos were never trained on alone: the push demos were ready first, so they went into v9 (section 10).
+
+### 9. Pushing, filmed with a phone (`src/push_track.py`, `src/push_extract.py`, `src/sim_push.py`)
+
+**Recordings:** the robot's cameras were down that day, so I filmed with my phone on a stand, from about where the
+robot head stands. The 23 videos contain 42 moves:
+- 20 straight pushes between neighbouring crosses (5 per direction) and 8 long ones between A and C;
+- 14 turning moves (8 clockwise, 6 counter-clockwise), each made of 2 to 4 separate pushes that turn the cube
+  about 90 degrees each.
+
+**How the tracking works with one camera:**
+- One camera gets a marker's depth 2-3 cm wrong. But a pushed cube stays on the table, so its top marker lies in the
+  plane 5.7 cm above the table marker: each corner is where the camera ray through it meets that plane.
+- I had no checkerboard video of the phone, so its focal length is the one that puts the top marker, from its own
+  one-camera pose, at the cube's height. The positions barely depend on it.
+- Where the cube rests on a cross, it is 0.1-1.7 cm from that cross as the stereo cameras measured it the week
+  before (up to 3.5 cm where I stopped short).
+- The videos are cut into pushes where the cube moves, and into moves from one cross to the next.
+
+**Replay on the simulated robot:** a scripted controller again, but driven by the cube's motion this time: my
+fingertips are not tracked (the marker on my hand sits 12 cm behind them). The gripper is closed, its fingers sit on
+the face away from the motion at mid-height, and they follow the path that point took on my cube.
+
+**Problems I hit:**
+- **The sim arm sagged 3.4 cm toward its base** from a still target near the table, enough to push the cube 3 cm
+  off-centre and turn it. A small integral term on the target fixed it.
+- **Every push tipped the cube by 14 degrees.** The controller holds the gripper about 6 degrees off vertical, so the
+  fingers touch the top of the face first, and at robosuite's friction (1.0) a 5.7 cm cube tips when pushed above
+  2.85 cm. The push scenes use 0.4 (plastic on cloth, not measured). The finger pads keep their own friction, so
+  grasps do not change.
+- **Fingertips lower than 1.6 cm above the table wedged under the cube** and held it tilted.
+
+**Result:** 27 of my 28 straight pushes replay, median 1.4 cm off; the one failure is a long push where the sim cube
+spun 73 degrees. **None of my 14 turning moves replays.**
+- Each of my turning pushes is close to a turn about one point near a front corner: the cube "walks" forward about
+  5 cm per 90 degrees.
+- The sim cube turned only 41% (clockwise) to 54% (counter-clockwise) as much, and tipped over in 4 moves.
+  Changing the contact point, the push angle and height, or pushing with a corner of the fingers never turned it
+  more than about 50 degrees in one push.
+- I think there are two reasons. MuJoCo rests a box on its four corners, which resists turning the most, and the
+  closed Panda fingers are a flat 4.6 cm block that keeps the face square like a ruler, where my fingertip is a
+  point the cube can pivot around. This is the embodiment gap again, in the contact this time instead of the grasp.
+
+### 10. Nineteen sentences, one policy (v9 to v11)
+
+**The data:** the 13 sentences of section 8 plus 6 new ones, "push the cube from cross X to cross Y", each taught by
+one of my straight pushes, 100 demos each. "Move" and "push" use the same crosses, so only the verb decides between
+picking the cube up and sliding it.
+
+**The test:** 20 cube poses per sentence, the cube on its start cross. With 20 poses a rate is good to about 10%.
+
+| Version | What changed | Pushes (6 sentences) | Pick and place (13) |
+|---|---|---|---|
+| v9 | 30k steps from v7 on all 19 sentences | 18% | 26% |
+| v10 | push demos pause above the start point and come down 4.6 cm from the face instead of 2.6 | 15% | 22% |
+| v11 | push demos start coming down only after the policy's first 2.5 s of actions | **46%** | 23% |
+
+**What I learned:**
+- **v9 knocked the cube over** in most episodes of four push sentences, all the pushes starting at A or C: the
+  closed gripper came down on the cube's top edge and rolled it.
+- **v10's pause did not help, and a test showed why.** The policy predicts 50 steps (2.5 s) at a time and runs them
+  blind. In the push demos the descent started at step 39, so the first chunk, predicted from the starting pose,
+  already brought the fingers down: in a test they landed 0.5 cm from the face instead of 4.6.
+- **v11 starts the descent after 2.6 s,** as the grasp demos do after 2.4 s, so it is predicted from right above the
+  start point with the wrist camera on the cube. No push episode tipped the cube after that (0 of 120), and the four
+  failing sentences went from 0% to 30-60%. It is the lesson of v6, learned a second time.
+- **The verb works.** With "push" the cube stayed on the table in all 120 push episodes; with "move" between the
+  same crosses the robot lifted it in 50-85% of episodes.
+- **What does not work yet:** pushes still end 4-10 cm off when the cube turns on the way, and most carries stop
+  3-7 cm short of the far cross while the scripted demos land within 1 cm. One, A to C while turning, puts the cube
+  back down where it started. So 6 of the 11 carry sentences score 0-5%.
+- The two turn-on-the-spot sentences dropped from v7's 76% and 40% to 30% and 35%. The test is not the same (the
+  cube now starts on a cross), and the model now shares itself with 17 other sentences.
+
+![same start, two verbs](docs/vla_move_vs_push.gif)
+
+*Same start cross, two sentences (v11): "move" picks the cube up and carries it, "push" slides it.*
+
+<details>
+<summary>v11, every sentence</summary>
+
+| Sentence | Success | Lifted (pick) or kept low (push) | Scripted replay, same poses |
+|---|---|---|---|
+| push the cube from cross A to cross B | 60% | 100% | 90% |
+| push the cube from cross B to cross C | 45% | 100% | 95% |
+| push the cube from cross C to cross B | 50% | 100% | 100% |
+| push the cube from cross B to cross A | 45% | 100% | 100% |
+| push the cube from cross A to cross C | 45% | 100% | 75% |
+| push the cube from cross C to cross A | 30% | 100% | 60% |
+| pick up the cube, rotate it counter-clockwise and put it down | 30% | 50% | 100% |
+| pick up the cube, rotate it clockwise and put it down | 35% | 85% | 100% |
+| move the cube from cross A to cross B | 50% | 85% | 100% |
+| move the cube from cross B to cross C | 5% | 55% | 100% |
+| move the cube from cross A to cross C | 0% | 60% | 100% |
+| move the cube from cross C to cross A | 0% | 75% | 100% |
+| move the cube from cross B to cross A | 0% | 75% | 100% |
+| move the cube from cross C to cross B | 30% | 80% | 100% |
+| move the cube from cross A to cross B and rotate it counter-clockwise | 45% | 75% | 100% |
+| move the cube from cross B to cross C and rotate it clockwise | 30% | 85% | 100% |
+| move the cube from cross A to cross C and rotate it counter-clockwise | 0% | 50% | 100% |
+| move the cube from cross B to cross A and rotate it counter-clockwise | 70% | 75% | 100% |
+| move the cube from cross C to cross B and rotate it clockwise | 0% | 80% | 100% |
+
+</details>
+
 ## Limitations
 
 - **One person, one cube, one table,** and only turns about the vertical axis.
+- **The push videos come from one phone camera** with an estimated focal length, not a calibrated one, and the
+  push friction (0.4) is a guess. Turning pushes do not work in the simulator at all.
 - **About half the clips have the cube hidden while held,** so the world model uses 64 of 109.
 - **The grasp and release rules are hand-tuned thresholds.**
 - **The robot side is simulation only.**
-- **The VLA works on single template motions,** with the clock in its state, and is tested on 50 simulated poses.
+- **The VLA learns from one template motion per sentence,** with the clock in its state, and is tested on 20-50
+  simulated poses per sentence.
 
 ## How to run
 
@@ -229,11 +390,16 @@ The environments and their versions are in `SETUP.md`.
 python -m src.run_all                  # raw videos -> tracking, QC, grasp/release, replays, world model, planning (~25 min)
 python -m pytest tests -q              # geometry and convention tests
 python -m src.run_all --synthetic      # the same pipeline on rendered test clips with known ground truth
+python -m src.push_track               # phone videos -> cube and hand tracks in the table frame
+python -m src.push_extract             # tracks -> pushes and moves (outputs/push/moves.csv)
+python -m src.sim_push --all           # replay every move on the simulated robot (outputs/push/replay.csv)
 ```
 
 **VLA:** the runs are in `scripts/vla/` (`run_v3.sh` to `run_v7.sh`). Each one generates demos
 (`src.make_sim_demos`), converts them to a LeRobot dataset (`src.to_lerobot`), trains (`train_smolvla.sh`) and
-evaluates (`src.eval_vla`). Evaluation results are in `outputs/vla/`.
+evaluates (`src.eval_vla`). For the 19 sentences, `run_v8_data.sh` makes the pick-and-place demos, and each of
+v9 to v11 has a data script (push demos, merged with v8's by `src.merge_datasets`) and a training script that also
+runs the tests. Evaluation results are in `outputs/vla/`.
 
 **Reproducibility:** I checked that `run_all` rebuilds every number above from the raw videos. The raw videos,
 demos, datasets and model checkpoints are not in the repository because of their size.
@@ -241,10 +407,11 @@ demos, datasets and model checkpoints are not in the repository because of their
 ## Repository layout
 
 ```
-src/            pipeline: markers, tracking, grasp/release, replay, world model, planning, VLA data and evaluation
+src/            pipeline: markers, tracking, grasp/release, replay, pushing, world model, planning, VLA data and evaluation
 scripts/vla/    the SmolVLA runs (demos, conversion, training, evaluation)
 tests/          unit tests, synthetic clip generator, simulator smoke tests
 outputs/real/   results on my clips: replay tables, embodiment-gap plots, world model report and plots
+outputs/push/   my push moves and their sim replays
 outputs/vla/    SmolVLA evaluation results per version
 outputs/print/  printable marker sheets
 docs/           images and GIFs used here

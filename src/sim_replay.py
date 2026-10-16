@@ -50,6 +50,21 @@ AGENTVIEW_POS = (0.6586131746834771, 0.0, 1.6103500240372423)
 AGENTVIEW_QUAT = (0.6380177736282349, 0.3048497438430786, 0.3048497438430786, 0.6380177736282349)  # wxyz
 WRIST_CAMERA = "robot0_eye_in_hand"     # identical in LIBERO (robosuite 1.4) and robosuite 1.5.2
 CUBE_HOME_XY = np.array([-0.10, 0.0])   # 0.56 m in front of the base, as in robosuite's default Lift
+# The crosses on my table (mean cube rest position per cross over the 109 clips, table-marker frame, m) and the
+# same crosses on the sim table: the human table is turned so A -> C runs along +y (A on the robot's right, as the
+# head camera saw it) and B lands at SIM_CROSS_B. One fixed rotation, so a carry from A to C goes from A to C.
+HUMAN_CROSSES = {"A": np.array([-0.467, 0.185]), "B": np.array([-0.277, 0.196]), "C": np.array([-0.077, 0.195])}
+SIM_CROSS_B = np.array([-0.13, 0.0])
+_AC = HUMAN_CROSSES["C"] - HUMAN_CROSSES["A"]
+FRAME_YAW = np.pi / 2 - np.arctan2(_AC[1], _AC[0])  # human table frame -> sim world, about z
+
+
+def to_sim_xy(xy):
+    """A point on my table (table-marker frame, m) -> the sim table."""
+    return SIM_CROSS_B + rotz(FRAME_YAW)[:2, :2] @ (np.asarray(xy)[:2] - HUMAN_CROSSES["B"])
+
+
+SIM_CROSSES = {k: to_sim_xy(v) for k, v in HUMAN_CROSSES.items()}
 
 MIN_TARGET_Z = TABLE_Z + 0.02
 MAX_REACH = 0.70     # horizontal; beyond ~0.75 m the arm nears full extension and OSC tracking degrades
@@ -64,10 +79,18 @@ FACES = [(2, 1, "1 1 1 1"), (0, 1, "0.8 0.1 0.1 1"), (1, 1, "0.1 0.3 0.9 1"),
          (0, -1, "1 0.5 0 1"), (1, -1, "0.1 0.7 0.2 1"), (2, -1, "1 0.9 0 1")]
 
 
-def customise_xml(xml):
+def customise_xml(xml, crosses=False, slide_friction=None):
     """Resize Lift's cube to the real cube, set its mass, colour each face so yaw shows in renders,
-    match LIBERO's table texture and agentview pose, and add a close camera on the cube."""
+    match LIBERO's table texture and agentview pose, and add a close camera on the cube. With crosses, draw the
+    three crosses of my table (visual only: 6 cm arms, dark on the light wood). slide_friction sets the cube's and
+    the table's sliding friction (MuJoCo takes the larger of the two geoms'; the finger pads keep their 2.0)."""
     root = ET.fromstring(xml)
+    if crosses:
+        world = root.find("worldbody")
+        for name, (x, y) in SIM_CROSSES.items():
+            for arm, size in (("x", "0.03 0.004 0.0005"), ("y", "0.004 0.03 0.0005")):
+                ET.SubElement(world, "geom", name=f"cross_{name}_{arm}", type="box", pos=f"{x} {y} {TABLE_Z + 0.0005}",
+                              size=size, rgba="0.12 0.12 0.15 1", contype="0", conaffinity="0", group="1")
     for tex in root.iter("texture"):
         if tex.get("name") == "tex-ceramic":  # light wood like LIBERO; a white table hides the cube's white top
             tex.set("file", str(Path(tex.get("file")).with_name("light-wood.png")))
@@ -86,6 +109,8 @@ def customise_xml(xml):
             geom.set("size", f"{h} {h} {h}")
         if geom.get("name") == "cube_g0":
             geom.set("density", str(CUBE_MASS / C.CUBE_SIDE ** 3))
+        if slide_friction is not None and geom.get("name") in ("cube_g0", "table_collision"):
+            geom.set("friction", f"{slide_friction} 0.005 0.0001")
     body = next(b for b in root.iter("body") if b.get("name") == "cube_main")
     for i, (axis, sign, rgba) in enumerate(FACES):
         pos, size = np.zeros(3), np.full(3, 0.9 * h)
@@ -95,7 +120,7 @@ def customise_xml(xml):
     return ET.tostring(root, encoding="unicode")
 
 
-def make_env(render=True):
+def make_env(render=True, crosses=False, slide_friction=None):
     cfg = load_composite_controller_config(robot="Panda")
     cfg["body_parts"]["right"].update(input_type="absolute", input_ref_frame="world")
     env = suite.make("Lift", robots="Panda", controller_configs=cfg, has_renderer=False,
@@ -105,7 +130,7 @@ def make_env(render=True):
     # This creates new robot objects; reset() only re-binds observables to them while hard_reset is on.
     env.table_offset = np.array([0.0, 0.0, TABLE_Z])
     env._load_model()
-    env.reset_from_xml_string(customise_xml(env.model.get_xml()))
+    env.reset_from_xml_string(customise_xml(env.model.get_xml(), crosses, slide_friction))
     env.hard_reset = False  # later resets keep this model instead of rebuilding the default one
     assert np.allclose(env.sim.data.get_body_xpos("robot0_base")[:2], ROBOT_BASE_XY)
     return env
@@ -147,6 +172,13 @@ def human_signals(clip):
                 cube_yaw0=float(clip["cube_yaw0"]), cube1=clip["cube1"], cube_yaw1=float(clip["cube_yaw1"]))
 
 
+def displacement_frame(h, sim_cube_yaw, frame_yaw=None):
+    """Rotation applying my cube's displacement in the sim. Default: in the cube's own frame (the sim cube can start
+    at any yaw). With frame_yaw (e.g. FRAME_YAW): one fixed rotation of my whole table, so carries keep their
+    direction between the crosses."""
+    return rotz(frame_yaw) if frame_yaw is not None else rotz(sim_cube_yaw) @ rotz(-h["cube_yaw0"])
+
+
 def hold_mask(clip):
     return (clip["t"] >= float(clip["t_grasp"])) & (clip["t"] <= float(clip["t_release"]))
 
@@ -162,7 +194,7 @@ def face_costs(clip, sim_cube_yaw, heading_home):
 
 
 def retarget(clip, sim_cube_pos, sim_cube_yaw, heading_home, use_grasp_point=True, face_rng=None,
-             face_margin=0.0):
+             face_margin=0.0, frame_yaw=None):
     """Gripper targets (pos (N,3), closing-axis heading (N,), clamped (N,)) at the clip's sample times.
 
     Grasp-anchored, 4-DoF: the tracked point's displacement from the grasp instant and the
@@ -185,7 +217,7 @@ def retarget(clip, sim_cube_pos, sim_cube_yaw, heading_home, use_grasp_point=Tru
     else:
         point = hand_pos - hp_g + h["cube0"]
     disp = point - h["cube0"]  # zero at the grasp instant
-    R = rotz(sim_cube_yaw) @ rotz(-h["cube_yaw0"])
+    R = displacement_frame(h, sim_cube_yaw, frame_yaw)
     pos = sim_cube_pos + disp @ R.T
     radial = pos[:, :2] - ROBOT_BASE_XY
     reach = np.linalg.norm(radial, axis=1)
@@ -282,7 +314,7 @@ def ramp(a, b, n):
 
 
 def plan_steps(env, clip, sim_cube_pos, sim_cube_yaw, use_grasp_point, face_rng=None, face_margin=0.0,
-               approach_h=APPROACH_H, hover_s=0.0):
+               approach_h=APPROACH_H, hover_s=0.0, frame_yaw=None):
     """Per-step targets: home to above the grasp point, straight down, close; the retargeted human hold; open,
     straight up, and hold while the cube settles. hover_s pauses above the grasp point before going down: the arm
     trails its target by 2-3 cm, so without it the fingers start down while still coming in from the side, which
@@ -290,7 +322,7 @@ def plan_steps(env, clip, sim_cube_pos, sim_cube_yaw, use_grasp_point, face_rng=
     eef0, R0 = eef_pose(env)
     heading_home = yaw_of(R0)
     pos_t, heading_t, clamped = retarget(clip, sim_cube_pos, sim_cube_yaw, heading_home, use_grasp_point, face_rng,
-                                         face_margin)
+                                         face_margin, frame_yaw)
     ht, closed = hold_schedule(clip)
     tg, tr = float(clip["t_grasp"]), float(clip["t_release"])
     hold_pos = np.stack([np.interp(ht, clip["t"], pos_t[:, k]) for k in range(3)], axis=1)
@@ -321,13 +353,14 @@ def bridged_pct(clip):
 
 
 def run_replay(env, clip, sim_cube_pos, sim_cube_yaw, use_grasp_point=True, record=True, synthetic=False, perturb=None,
-               video=True, face_rng=None, face_margin=0.0, approach_h=APPROACH_H, hover_s=0.0):
+               video=True, face_rng=None, face_margin=0.0, approach_h=APPROACH_H, hover_s=0.0, frame_yaw=None):
     """Returns metrics, video frames (if record and video) and the step log (images only if record).
     perturb(plan) -> (N, 4) offsets (dx, dy, dz, dheading) added to the executed targets only; the logged action
     stays the planned target, so it points back on course (make_sim_demos --noise)."""
     env.reset()
     set_cube_pose(env, sim_cube_pos, sim_cube_yaw)
-    plan = plan_steps(env, clip, sim_cube_pos, sim_cube_yaw, use_grasp_point, face_rng, face_margin, approach_h, hover_s)
+    plan = plan_steps(env, clip, sim_cube_pos, sim_cube_yaw, use_grasp_point, face_rng, face_margin, approach_h, hover_s,
+                      frame_yaw)
     offsets = perturb(plan) if perturb else np.zeros((len(plan["pos"]), 4))
     h = human_signals(clip)
     visible = clip["cube_visible"]
@@ -358,16 +391,16 @@ def run_replay(env, clip, sim_cube_pos, sim_cube_yaw, use_grasp_point=True, reco
 
     final = sim_state(env)
     log = {k: np.array(v) for k, v in log.items() if len(v)}
-    metrics = replay_metrics(log, final, h, sim_cube_pos, sim_cube_yaw, plan)
+    metrics = replay_metrics(log, final, h, sim_cube_pos, sim_cube_yaw, plan, frame_yaw)
     metrics["bridged_pct"] = bridged_pct(clip)
     log.update(phase=plan["phase"], clip_time=plan["clip_time"], **{f"final_{k}": v for k, v in final.items()})
     return metrics, frames, log
 
 
-def replay_metrics(log, final, h, sim_cube_pos, sim_cube_yaw, plan):
+def replay_metrics(log, final, h, sim_cube_pos, sim_cube_yaw, plan, frame_yaw=None):
     start = 0  # the cube at rest, before the approach: a push while approaching counts against the replay
     cube_yaw = np.unwrap(np.r_[log["cube_yaw"], final["cube_yaw"]])
-    expected = sim_cube_pos + rotz(sim_cube_yaw) @ rotz(-h["cube_yaw0"]) @ (h["cube1"] - h["cube0"])
+    expected = sim_cube_pos + displacement_frame(h, sim_cube_yaw, frame_yaw) @ (h["cube1"] - h["cube0"])
     human_dyaw = np.degrees(h["cube_yaw1"] - h["cube_yaw0"])
     sim_dyaw = np.degrees(cube_yaw[-1] - cube_yaw[start])
     held = np.flatnonzero(plan["closed"])

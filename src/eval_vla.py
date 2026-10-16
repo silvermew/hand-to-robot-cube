@@ -13,6 +13,10 @@ success = all three. The scripted replay of a randomly drawn +60 bin clip is sco
 way from the same poses. Policies see 256x256 agentview and wrist images (upright), the 6-D
 state of src/vla_format.py and the fixed instruction. --video N saves the first N policy
 episodes (agentview | wrist) to outputs/vla/eval/.
+A push task (push_AB, ...) starts the cube as its demos did (src/make_sim_demos.py) in the push scene
+(src/sim_push.py) and succeeds when the cube ends within 3 cm of where my push put it, turned within 15 deg of the
+demos' median, without being lifted (rise < 1 cm) or tipped (tilt < 10 deg); the scripted reference is the push
+replay from the same pose.
 """
 import argparse
 import json
@@ -22,10 +26,12 @@ import numpy as np
 from scipy.spatial.transform import Rotation
 
 from src.common import ROOT, data_dirs, is_synthetic
-from src.geometry import gripper_down
-from src.make_sim_demos import INSTRUCTION, bin_clips, sample_cube_pose
-from src.sim_replay import (LIFT_MIN, POS_TOL, WRIST_CAMERA, YAW_TOL_DEG, cube_pose, make_env, render, run_replay,
-                            set_cube_pose, sim_state, with_cube_turn)
+from src.geometry import gripper_down, rotz
+from src.make_sim_demos import (CROSS_JITTER, INSTRUCTION, PUSH_YAW_JITTER, TASKS, bin_clips, is_push, sample_cross_pose,
+                                sample_cube_pose, task_clip)
+from src.sim_push import MAX_RISE, MAX_TILT_DEG, make_push_env, run_push_replay, sim_goal, start_pose
+from src.sim_replay import (FRAME_YAW, LIFT_MIN, POS_TOL, WRIST_CAMERA, YAW_TOL_DEG, cube_pose, make_env, render,
+                            run_replay, set_cube_pose, sim_state, with_cube_turn)
 from src.vla_format import CLOCK_NAME, FPS, action_to_target, make_state
 
 MAX_STEPS = 400
@@ -80,7 +86,10 @@ def trained_with_clock(path):
 
 def demo_turn(demo_dir):
     """Median cube turn (deg) of the training demos."""
-    turns = [float(np.load(p)["metric_sim_dyaw_deg"]) for p in sorted(Path(demo_dir).glob("*.npz"))]
+    turns = []
+    for p in sorted(Path(demo_dir).glob("*.npz")):
+        d = np.load(p)
+        turns.append(float(d["metric_sim_turn_deg"] if "metric_sim_turn_deg" in d.files else d["metric_sim_dyaw_deg"]))
     if not turns:
         raise SystemExit(f"no demos in {demo_dir}: run src.make_sim_demos first")
     return float(np.median(turns)), len(turns)
@@ -91,7 +100,7 @@ def run_policy_episode(env, act, pos0, yaw0, frames=None, instruction=INSTRUCTIO
     set_cube_pose(env, pos0, yaw0)
     if hasattr(act, "reset"):
         act.reset()
-    z0, max_z = pos0[2], pos0[2]
+    z0, max_z, min_up = pos0[2], pos0[2], 1.0
     yaws = [yaw0]
     clock = getattr(act, "clock", False)
     for step in range(MAX_STEPS):
@@ -105,19 +114,33 @@ def run_policy_episode(env, act, pos0, yaw0, frames=None, instruction=INSTRUCTIO
         env.step(np.r_[pos, Rotation.from_matrix(gripper_down(heading)).as_rotvec(), grip])
         cp, cy = cube_pose(env)
         max_z = max(max_z, cp[2])
+        min_up = min(min_up, Rotation.from_quat(sim_state(env)["cube_quat"]).as_matrix()[2, 2])
         yaws.append(cy)
     final_pos, _ = cube_pose(env)
-    return dict(lift_cm=100 * (max_z - z0), final_pos=final_pos, dyaw_deg=np.degrees(np.unwrap(yaws)[-1] - yaw0))
+    return dict(lift_cm=100 * (max_z - z0), final_pos=final_pos, dyaw_deg=np.degrees(np.unwrap(yaws)[-1] - yaw0),
+                tilt_deg=float(np.degrees(np.arccos(np.clip(min_up, -1, 1)))))
 
 
-def score(lift_cm, final_pos, dyaw_deg, pos0, target_dyaw):
+def score(lift_cm, final_pos, dyaw_deg, pos0, target_dyaw, goal=None):
+    """goal: where the cube should end (default: where it started)."""
+    goal = pos0 if goal is None else goal
     lifted = lift_cm >= 100 * LIFT_MIN
     # "placed" needs a lift first: an untouched cube would otherwise count as put back
-    placed = bool(lifted and np.linalg.norm(final_pos[:2] - pos0[:2]) < POS_TOL and abs(final_pos[2] - pos0[2]) < 0.01)
+    placed = bool(lifted and np.linalg.norm(final_pos[:2] - goal[:2]) < POS_TOL and abs(final_pos[2] - goal[2]) < 0.01)
     yaw_ok = abs(dyaw_deg - target_dyaw) < YAW_TOL_DEG
     return dict(lifted=bool(lifted), placed=placed, yaw_ok=bool(yaw_ok), success=bool(lifted and placed and yaw_ok),
                 lift_cm=round(float(lift_cm), 1), moved_cm=round(100 * float(np.linalg.norm(final_pos[:2] - pos0[:2])), 1),
-                dyaw_deg=round(float(dyaw_deg), 1))
+                dyaw_deg=round(float(dyaw_deg), 1), off_goal_cm=round(100 * float(np.linalg.norm(final_pos[:2] - goal[:2])), 1))
+
+
+def score_push(lift_cm, tilt_deg, final_pos, dyaw_deg, pos0, target_dyaw, goal):
+    low = lift_cm < 100 * MAX_RISE and tilt_deg < MAX_TILT_DEG
+    on_goal = bool(np.linalg.norm(final_pos[:2] - goal[:2]) < POS_TOL)
+    yaw_ok = abs(dyaw_deg - target_dyaw) < YAW_TOL_DEG
+    return dict(low=bool(low), on_goal=on_goal, yaw_ok=bool(yaw_ok), success=bool(low and on_goal and yaw_ok),
+                lift_cm=round(float(lift_cm), 1), tilt_deg=round(float(tilt_deg), 1),
+                moved_cm=round(100 * float(np.linalg.norm(final_pos[:2] - pos0[:2])), 1), dyaw_deg=round(float(dyaw_deg), 1),
+                off_goal_cm=round(100 * float(np.linalg.norm(final_pos[:2] - goal[:2])), 1))
 
 
 def main():
@@ -134,39 +157,62 @@ def main():
     p.add_argument("--instruction", default=INSTRUCTION)
     p.add_argument("--clip", default=None, help="the scripted reference replays this clip (default: a random +60 bin clip)")
     p.add_argument("--turn", choices=("hand", "cube"), default="hand", help="the scripted reference's turn mode")
+    p.add_argument("--task", choices=sorted(TASKS), default=None,
+                   help="a task of make_sim_demos.TASKS: its sentence and clip, crosses drawn, the cube starts on its "
+                        "cross and must end where the clip puts it")
     args = p.parse_args()
     dirs = data_dirs(args.data)
-    clips = [(args.clip, dict(np.load(dirs["processed"] / f"{args.clip}.npz")))] if args.clip else bin_clips(dirs)
+    if args.task:
+        clips = [task_clip(dirs, args.task)]
+        args.instruction = TASKS[args.task][0]
+    else:
+        clips = [(args.clip, dict(np.load(dirs["processed"] / f"{args.clip}.npz")))] if args.clip else bin_clips(dirs)
+        if args.turn == "cube":
+            clips = [(n, with_cube_turn(c)) for n, c in clips]
     if not clips:
         raise SystemExit("no processed clips in the rotation bin; run the pipeline first")
-    if args.turn == "cube":
-        clips = [(n, with_cube_turn(c)) for n, c in clips]
+    task_kw = dict(approach_h=0.15, hover_s=0.4, frame_yaw=FRAME_YAW) if args.task else {}  # as the task demos
     target, n_demos = demo_turn(args.demos or dirs["base"] / "vla_demos")
     act = random_policy(args.seed) if args.policy == "random" else lerobot_policy(args.policy, args.device, args.n_action_steps)
-    env = make_env(render=True)
+    push = is_push(args.task)
+    env = make_push_env() if push else make_env(render=True, crosses=bool(args.task))
     rng = np.random.default_rng(args.seed)
     video_dir = Path(args.video_dir)
     rows = {"policy": [], "scripted": []}
     for ep in range(args.episodes):
-        pos0, yaw0 = sample_cube_pose(rng)
+        if push:
+            pos0, yaw0 = start_pose(clips[0][1], rng, CROSS_JITTER, PUSH_YAW_JITTER)
+            goal = sim_goal(clips[0][1], pos0)
+        else:
+            pos0, yaw0 = sample_cross_pose(rng, TASKS[args.task][2]) if args.task else sample_cube_pose(rng)
+            goal = pos0 + rotz(FRAME_YAW) @ (clips[0][1]["cube1"] - clips[0][1]["cube0"]) if args.task else None
         frames = [] if ep < args.video else None
         r = run_policy_episode(env, act, pos0, yaw0, frames, args.instruction)
-        rows["policy"].append(score(r["lift_cm"], r["final_pos"], r["dyaw_deg"], pos0, target))
+        if push:
+            rows["policy"].append(score_push(r["lift_cm"], r["tilt_deg"], r["final_pos"], r["dyaw_deg"], pos0, target, goal))
+        else:
+            rows["policy"].append(score(r["lift_cm"], r["final_pos"], r["dyaw_deg"], pos0, target, goal))
         if frames:
             import imageio.v2 as imageio
             video_dir.mkdir(parents=True, exist_ok=True)
             tag = f"_n{args.n_action_steps}" if args.n_action_steps else ""
+            tag += f"_{args.task}" if args.task else ""
             imageio.mimsave(video_dir / f"{Path(args.policy).parent.name}{tag}_episode{ep + 1}.mp4", frames, fps=20)
         name, clip = clips[rng.integers(len(clips))]
-        m, _, log = run_replay(env, clip, pos0, yaw0, True, record=False)
-        rows["scripted"].append(score(m["lift_cm"], log["final_cube_pos"], m["sim_dyaw_deg"], pos0, target))
+        if push:
+            m, _, log = run_push_replay(env, clip, pos0, yaw0, record=False)
+            rows["scripted"].append(score_push(m["rise_cm"], m["tilt_deg"], log["final_cube_pos"], m["sim_turn_deg"], pos0,
+                                               target, goal))
+        else:
+            m, _, log = run_replay(env, clip, pos0, yaw0, True, record=False, **task_kw)
+            rows["scripted"].append(score(m["lift_cm"], log["final_cube_pos"], m["sim_dyaw_deg"], pos0, target, goal))
         print(f"episode {ep + 1}: policy {rows['policy'][-1]} | scripted ({name}) {rows['scripted'][-1]}")
     env.close()
     tag = "SYNTHETIC DATA, " if is_synthetic(args.data) else ""
     print(f"\n{tag}{args.episodes} cube poses; target turn {target:+.1f} deg +-{YAW_TOL_DEG:.0f} (median of {n_demos} demos)")
     for who, rs in rows.items():
-        print(f"{who:9s}: " + "  ".join(f"{k} {100 * np.mean([r[k] for r in rs]):5.1f}%"
-                                        for k in ("lifted", "placed", "yaw_ok", "success")))
+        keys = ("low", "on_goal", "yaw_ok", "success") if push else ("lifted", "placed", "yaw_ok", "success")
+        print(f"{who:9s}: " + "  ".join(f"{k} {100 * np.mean([r[k] for r in rs]):5.1f}%" for k in keys))
 
 
 if __name__ == "__main__":
