@@ -1,0 +1,48 @@
+// The pipeline figure in the README: dot -Tpng -Gdpi=110 docs/pipeline.dot -o docs/pipeline.png
+digraph pipeline {
+    rankdir=TB;
+    graph [fontname="Helvetica", fontsize=13, nodesep=0.35, ranksep=0.35, bgcolor="white", newrank=true];
+    node [shape=box, style="rounded", fontname="Helvetica", fontsize=11, color="#444444", margin="0.12,0.06"];
+    edge [color="#555555", arrowsize=0.7];
+
+    subgraph cluster_hand {
+        label="My hand"; color="#bbbbbb"; style="rounded";
+        stereo [label="109 stereo clips"];
+        phone [label="23 phone videos"];
+        track [label="tracking\ntrack.py"];
+        ptrack [label="one-camera tracking\npush_track.py"];
+        extract [label="grasp and release\nextract.py"];
+        pextract [label="pushes and moves\npush_extract.py"];
+    }
+    subgraph cluster_wm {
+        label="World model"; color="#bbbbbb"; style="rounded";
+        wm [label="world model\nworld_model/"];
+        plan [label="planning\nplanning.py"];
+    }
+    subgraph cluster_robot {
+        label="Simulated Panda (scripted)"; color="#bbbbbb"; style="rounded";
+        replay [label="grasp replay\nsim_replay.py"];
+        preplay [label="push replay\nsim_push.py"];
+    }
+    subgraph cluster_vla {
+        label="SmolVLA"; color="#bbbbbb"; style="rounded";
+        demos [label="demos\nmake_sim_demos.py"];
+        dataset [label="LeRobot dataset\nto_lerobot.py"];
+        vla [label="fine-tune\nscripts/vla/"];
+        test [label="closed-loop test\neval_vla.py"];
+    }
+    { rank=same; stereo; phone; }
+    { rank=same; extract; pextract; }
+    { rank=same; replay; preplay; }
+    { rank=same; demos; dataset; vla; test; }
+
+    stereo -> track -> extract;
+    phone -> ptrack -> pextract;
+    extract -> wm -> plan;
+    extract -> replay;
+    plan -> replay;
+    pextract -> preplay;
+    replay -> demos;
+    preplay -> demos;
+    demos -> dataset -> vla -> test;
+}

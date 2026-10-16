@@ -36,31 +36,7 @@ turned within 15 degrees of the target, without being lifted or tipped.
 
 ## How the pieces fit
 
-```mermaid
-flowchart LR
-    subgraph hand [My hand]
-        V1[109 stereo clips] --> T1[tracking<br/>track.py]
-        T1 --> X1[grasp and release<br/>extract.py]
-        V2[23 phone videos] --> T2[one-camera tracking<br/>push_track.py]
-        T2 --> X2[pushes and moves<br/>push_extract.py]
-    end
-    subgraph robot [Simulated Panda]
-        R1[grasp replay<br/>sim_replay.py]
-        R2[push replay<br/>sim_push.py]
-    end
-    subgraph learn [Learning]
-        WM[world model<br/>world_model/] --> PL[planning<br/>planning.py]
-        DM[demos<br/>make_sim_demos.py] --> DS[LeRobot dataset<br/>to_lerobot.py]
-        DS --> VLA[SmolVLA fine-tune<br/>scripts/vla/]
-        VLA --> EV[closed-loop test<br/>eval_vla.py]
-    end
-    X1 --> R1
-    X1 --> WM
-    PL --> R1
-    X2 --> R2
-    R1 --> DM
-    R2 --> DM
-```
+![pipeline](docs/pipeline.png)
 
 The robot never learns from my videos directly. My tracked motion drives a scripted controller in simulation, the
 replays that succeed become demonstrations, and SmolVLA learns from those. The world model learns from my data
